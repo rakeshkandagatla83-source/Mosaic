@@ -20,22 +20,45 @@ interface CanvasEngineProps {
   tiles: TileData[];
   config: MosaicConfig;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  highlightedPosition?: number | null;
 }
 
-export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps) {
+export function useCanvasEngine({ tiles, config, canvasRef, highlightedPosition }: CanvasEngineProps) {
   const scale = useRef(1);
   const offset = useRef({ x: 0, y: 0 });
   const isDragging = useRef(false);
   const lastTouch = useRef<{ x: number, y: number, dist?: number } | null>(null);
   const targetFlyTransform = useRef<{ scale: number, x: number, y: number } | null>(null);
 
+  // -------------------------------------------------------------------
+  // Store tiles, config, and highlightedPosition in refs so that the
+  // draw() callback never needs them in its dependency array.
+  // This prevents the animation loop from restarting (and blinking)
+  // every time the parent re-renders due to unrelated state changes
+  // like the search bar input.
+  // -------------------------------------------------------------------
+  const tilesRef = useRef<TileData[]>(tiles);
+  const configRef = useRef<MosaicConfig>(config);
+  const highlightedPositionRef = useRef<number | null | undefined>(highlightedPosition);
+
+  // Keep refs in sync with prop changes (silently, no re-render)
+  useEffect(() => { tilesRef.current = tiles; }, [tiles]);
+  useEffect(() => { configRef.current = config; }, [config]);
+  useEffect(() => { highlightedPositionRef.current = highlightedPosition; }, [highlightedPosition]);
+
   const { getImage } = useImageCache();
 
+  // draw() has NO reactive deps — it reads everything from refs.
+  // The rAF loop in MosaicCanvas.tsx will NEVER restart due to parent re-renders.
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    const config = configRef.current;
+    const tiles = tilesRef.current;
+    const highlighted = highlightedPositionRef.current;
 
     const { gridCols } = config;
     const baseTileSize = config.tileSize || 20;
@@ -45,7 +68,7 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
     const logicalW = canvas.width / dpr;
     const logicalH = canvas.height / dpr;
 
-    // Geometric Animation Lerp Logic 
+    // Lerp animation toward fly-to target
     if (targetFlyTransform.current) {
       const t = targetFlyTransform.current;
       const lerpSpeed = 0.06;
@@ -53,27 +76,21 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
       offset.current.x += (t.x - offset.current.x) * lerpSpeed;
       offset.current.y += (t.y - offset.current.y) * lerpSpeed;
 
-      // Snap once close enough to save precision math
       if (Math.abs(t.scale - scale.current) < 0.005 && Math.abs(t.x - offset.current.x) < 1.0) {
-        targetFlyTransform.current = null; 
+        targetFlyTransform.current = null;
       }
     }
 
-    // Fill entire canvas white so no background bleeds through as grid lines
+    // Clear canvas
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, logicalW, logicalH);
 
     function isVisible(x: number, y: number, size: number) {
       if (!canvas) return false;
-      return (
-        x + size > 0 &&
-        y + size > 0 &&
-        x < canvas.width / dpr &&
-        y < canvas.height / dpr
-      );
+      return x + size > 0 && y + size > 0 && x < canvas.width / dpr && y < canvas.height / dpr;
     }
 
-    // Compute dimensions of the master Image slice if provided
+    // Compute master image slice dimensions
     let mSliceW = 0;
     let mSliceH = 0;
     if (config.masterImage) {
@@ -81,45 +98,60 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
       mSliceH = config.masterImage.height / config.gridRows;
     }
 
+    const currentTileSize = baseTileSize * scale.current;
+
     for (const tile of tiles) {
       const col = tile.position % gridCols;
       const row = Math.floor(tile.position / gridCols);
 
-      const x = col * tileSize + offset.current.x;
-      const y = row * tileSize + offset.current.y;
+      const x = col * currentTileSize + offset.current.x;
+      const y = row * currentTileSize + offset.current.y;
 
-      if (!isVisible(x, y, tileSize)) continue;
+      if (!isVisible(x, y, currentTileSize)) continue;
 
       const img = getImage(tile.imageUrl);
+      const drawSize = currentTileSize + 0.5; // +0.5 eliminates sub-pixel gaps
 
-      const drawSize = tileSize + 0.5; // +0.5 overlap eliminates sub-pixel gaps
       if (scale.current < 0.3 || !img || !img.complete) {
         ctx.fillStyle = tile.avgColor || "#ffffff";
         ctx.fillRect(x, y, drawSize, drawSize);
       } else {
-        // Draw the user's uploaded photo tile
         ctx.drawImage(img, x, y, drawSize, drawSize);
-        
-        // Apply authentic Phlearn-style overlay blending using Master Image slice
+
+        // Mosaic master-image overlay blend
         if (config.masterImage) {
-          ctx.globalAlpha = 0.85; // Slightly transparent to let user image bleed through
-          ctx.globalCompositeOperation = 'hard-light'; // Stronger blend than soft-light
-          
-          // Draw just the fractional slice of the master image that corresponds to this grid spot
+          ctx.globalAlpha = 0.85;
+          ctx.globalCompositeOperation = "hard-light";
           ctx.drawImage(
             config.masterImage,
-            col * mSliceW, row * mSliceH, mSliceW, mSliceH, // Source clipping box
-            x, y, drawSize, drawSize                       // Destination drawing box
+            col * mSliceW, row * mSliceH, mSliceW, mSliceH,
+            x, y, drawSize, drawSize
           );
-          
           ctx.globalAlpha = 1.0;
-          ctx.globalCompositeOperation = 'source-over'; // Restore normal mode
+          ctx.globalCompositeOperation = "source-over";
         }
       }
-    }
-  }, [tiles, config, canvasRef, getImage]);
 
-  // Phase 5: Search & Fly To specific coordinate smoothly
+      // Blue highlight border for the searched tile
+      if (highlighted !== null && highlighted !== undefined && tile.position === highlighted) {
+        const borderWidth = Math.max(2, currentTileSize * 0.08);
+        ctx.save();
+        ctx.strokeStyle = "#2563EB"; // Tailwind blue-600
+        ctx.lineWidth = borderWidth;
+        ctx.shadowColor = "#3B82F6";
+        ctx.shadowBlur = borderWidth * 3;
+        ctx.strokeRect(
+          x + borderWidth / 2,
+          y + borderWidth / 2,
+          currentTileSize - borderWidth,
+          currentTileSize - borderWidth
+        );
+        ctx.restore();
+      }
+    }
+  }, [canvasRef, getImage]); // stable — no tiles/config/highlighted in deps
+
+  // Fly-to event listener — reads config from ref so no config dep needed
   useEffect(() => {
     const handleFlyTo = (e: Event) => {
       const customEvent = e as CustomEvent;
@@ -127,31 +159,30 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
       const canvas = canvasRef.current;
       if (!canvas || isNaN(position)) return;
 
-      const { gridCols, tileSize: baseTileSize } = config;
-      const col = position % gridCols;
-      const row = Math.floor(position / gridCols);
-      
-      const targetScale = 12.0; // Mega Zoom
-      const targetTileSize = baseTileSize * targetScale;
+      const cfg = configRef.current;
+      const col = position % cfg.gridCols;
+      const row = Math.floor(position / cfg.gridCols);
+
+      const targetScale = 12.0;
+      const targetTileSize = cfg.tileSize * targetScale;
 
       const dpr = window.devicePixelRatio || 1;
       const logicalW = canvas.width / dpr;
       const logicalH = canvas.height / dpr;
 
-      // Calculate perfect offset to place the upper-left of tile precisely in mathematical center, offset by half a tile size
-      const targetX = (logicalW / 2) - (col * targetTileSize) - (targetTileSize / 2);
-      const targetY = (logicalH / 2) - (row * targetTileSize) - (targetTileSize / 2);
+      const targetX = logicalW / 2 - col * targetTileSize - targetTileSize / 2;
+      const targetY = logicalH / 2 - row * targetTileSize - targetTileSize / 2;
 
       targetFlyTransform.current = { scale: targetScale, x: targetX, y: targetY };
     };
 
-    window.addEventListener('mosaic-fly-to', handleFlyTo);
-    return () => window.removeEventListener('mosaic-fly-to', handleFlyTo);
-  }, [config, canvasRef]);
+    window.addEventListener("mosaic-fly-to", handleFlyTo);
+    return () => window.removeEventListener("mosaic-fly-to", handleFlyTo);
+  }, [canvasRef]); // stable — reads config from ref
 
   const handleZoom = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const zoomFactor = 1.08; // slightly smoother zoom step
+    const zoomFactor = 1.08;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -160,15 +191,11 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
     const mouseY = e.clientY - rect.top;
 
     const newScale = e.deltaY < 0 ? scale.current * zoomFactor : scale.current / zoomFactor;
-    
-    // Zoom constraints
     if (newScale < 0.05 || newScale > 20) return;
 
     const scaleRatio = newScale / scale.current;
-
     offset.current.x = mouseX - (mouseX - offset.current.x) * scaleRatio;
     offset.current.y = mouseY - (mouseY - offset.current.y) * scaleRatio;
-
     scale.current = newScale;
   }, [canvasRef]);
 
@@ -180,7 +207,7 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
 
   const handlePointerDown = useCallback(() => {
     isDragging.current = true;
-    targetFlyTransform.current = null; // Interrupt cinematic zoom if user drags manually
+    targetFlyTransform.current = null; // Cancel fly-to if user grabs canvas
   }, []);
 
   const handlePointerUp = useCallback(() => {
@@ -195,10 +222,10 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
-      lastTouch.current = { 
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2, 
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2, 
-        dist 
+      lastTouch.current = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        dist,
       };
     }
   }, []);
@@ -215,7 +242,7 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
-      
+
       const newScale = scale.current * (dist / lastTouch.current.dist);
       if (newScale < 0.05 || newScale > 20) return;
       const scaleRatio = newScale / scale.current;
@@ -228,7 +255,6 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
 
       offset.current.x = originX - (originX - offset.current.x) * scaleRatio;
       offset.current.y = originY - (originY - offset.current.y) * scaleRatio;
-
       scale.current = newScale;
       lastTouch.current = { ...lastTouch.current, dist };
     }
@@ -237,32 +263,28 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
   const fitToViewport = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
-    // We get logical CSS dimension
+
     const dpr = window.devicePixelRatio || 1;
     const canvasWidth = canvas.width / dpr;
     const canvasHeight = canvas.height / dpr;
 
-    const baseTileSize = config.tileSize || 15;
-    const totalGridWidth = config.gridCols * baseTileSize;
-    const totalGridHeight = config.gridRows * baseTileSize;
+    const cfg = configRef.current;
+    const baseTileSize = cfg.tileSize || 15;
+    const totalGridWidth = cfg.gridCols * baseTileSize;
+    const totalGridHeight = cfg.gridRows * baseTileSize;
 
-    // Calculate scale required to fit
     const scaleX = canvasWidth / totalGridWidth;
     const scaleY = canvasHeight / totalGridHeight;
-    const fitScale = Math.max(scaleX, scaleY); // 100% boundary cover mapping
-
-    // Apply strict boundaries so it doesn't break limits
+    const fitScale = Math.max(scaleX, scaleY);
     const safeScale = Math.max(0.05, Math.min(fitScale, 20));
 
-    // Calculate offsets to center it exactly
     const scaledGridW = totalGridWidth * safeScale;
     const scaledGridH = totalGridHeight * safeScale;
 
     scale.current = safeScale;
     offset.current.x = (canvasWidth - scaledGridW) / 2;
     offset.current.y = (canvasHeight - scaledGridH) / 2;
-  }, [config, canvasRef]);
+  }, [canvasRef]); // stable — reads config from ref
 
   const getTileAtCoordinate = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -272,7 +294,8 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
     const mouseX = clientX - rect.left;
     const mouseY = clientY - rect.top;
 
-    const { gridCols, gridRows, tileSize: baseTileSize = 15 } = config;
+    const cfg = configRef.current;
+    const { gridCols, gridRows, tileSize: baseTileSize = 15 } = cfg;
     const tileSize = baseTileSize * scale.current;
 
     const relativeX = mouseX - offset.current.x;
@@ -283,11 +306,21 @@ export function useCanvasEngine({ tiles, config, canvasRef }: CanvasEngineProps)
 
     if (col >= 0 && col < gridCols && row >= 0 && row < gridRows) {
       const position = row * gridCols + col;
-      return tiles.find(t => t.position === position) || null;
+      return tilesRef.current.find(t => t.position === position) || null;
     }
-    
-    return null;
-  }, [config, tiles, canvasRef]);
 
-  return { draw, handleZoom, handlePan, handlePointerDown, handlePointerUp, handleTouchStart, handleTouchMove, fitToViewport, getTileAtCoordinate };
+    return null;
+  }, [canvasRef]); // stable — reads tiles and config from refs
+
+  return {
+    draw,
+    handleZoom,
+    handlePan,
+    handlePointerDown,
+    handlePointerUp,
+    handleTouchStart,
+    handleTouchMove,
+    fitToViewport,
+    getTileAtCoordinate,
+  };
 }
