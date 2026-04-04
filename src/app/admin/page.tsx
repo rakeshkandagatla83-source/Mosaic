@@ -147,7 +147,7 @@ export default function AdminDashboard() {
           <input
             type="password"
             placeholder="Passcode"
-            className="w-full px-4 py-3 border rounded-xl mb-6 outline-none focus:ring-2 focus:ring-black transition"
+            className="w-full px-4 py-3 bg-white text-black placeholder:text-neutral-400 border border-neutral-300 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-black transition"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />

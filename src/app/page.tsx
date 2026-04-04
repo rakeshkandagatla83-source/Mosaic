@@ -171,7 +171,7 @@ export default function Home() {
         <div className="pointer-events-auto">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="bg-black text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-neutral-800 transition-colors shadow-lg"
+            className="bg-blue-600 text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-blue-700 transition-colors shadow-lg"
           >
             Upload Photo
           </button>

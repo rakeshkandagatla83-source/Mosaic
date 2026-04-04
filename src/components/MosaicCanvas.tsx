@@ -15,7 +15,9 @@ export default function MosaicCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const initialFitDone = useRef(false);
   const [hoveredTile, setHoveredTile] = useState<{ tile: TileData; x: number; y: number } | null>(null);
-  // Timeout ref so the card stays visible when cursor moves from canvas → card
+  // Tracks whether cursor is physically over the card — no timeouts needed
+  const isOverCardRef = useRef(false);
+  // Keep hoverTimeoutRef for cleanup only
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
@@ -74,12 +76,10 @@ export default function MosaicCanvas({
     return () => cancelAnimationFrame(id);
   }, [draw]);
 
-  // —— Hover hit-testing ——
-  const scheduleHoverClear = () => {
-    hoverTimeoutRef.current = setTimeout(() => setHoveredTile(null), 120);
-  };
-  const cancelHoverClear = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+  // —— Hover helpers — ref-based, no timeouts ——
+  // Only hide the card if cursor is NOT over it
+  const clearHoverIfNotOverCard = () => {
+    if (!isOverCardRef.current) setHoveredTile(null);
   };
 
   const handlePointerMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -87,16 +87,21 @@ export default function MosaicCanvas({
     if (e.buttons === 0) {
       const tile = getTileAtCoordinate(e.clientX, e.clientY);
       if (tile && tile.name) {
-        cancelHoverClear();
         setHoveredTile({ tile, x: e.clientX, y: e.clientY });
       } else {
-        scheduleHoverClear();
+        // Only clear if cursor has truly left — not if it moved onto the card
+        clearHoverIfNotOverCard();
       }
     } else {
-      cancelHoverClear();
+      // Dragging — always clear
+      isOverCardRef.current = false;
       setHoveredTile(null);
     }
   };
+
+  // Card mouse enter/leave — update the ref immediately
+  const onCardMouseEnter = () => { isOverCardRef.current = true; };
+  const onCardMouseLeave = () => { isOverCardRef.current = false; setHoveredTile(null); };
 
   // —— Web Share API ——
   const handleShare = async (tile: TileData) => {
@@ -129,7 +134,7 @@ export default function MosaicCanvas({
         onPointerUp={handlePointerUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onPointerLeave={() => { handlePointerUp(); scheduleHoverClear(); }}
+        onPointerLeave={() => { handlePointerUp(); clearHoverIfNotOverCard(); }}
       />
 
       {/* — Portrait Card Tooltip — */}
@@ -142,13 +147,15 @@ export default function MosaicCanvas({
             transform: "translate(-50%, calc(-100% - 20px))",
             pointerEvents: "none",
           }}
-          onMouseEnter={cancelHoverClear}
-          onMouseLeave={scheduleHoverClear}
         >
-          {/* Card itself is interactive so share button works */}
+          {/* Card — pointer events ON here so share button is clickable.
+              onMouseEnter cancels the clear-timeout so card stays visible
+              while cursor moves from canvas edge → card. */}
           <div
             className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-neutral-100"
             style={{ width: 200, pointerEvents: "auto" }}
+            onMouseEnter={onCardMouseEnter}
+            onMouseLeave={onCardMouseLeave}
           >
             {/* Portrait image — 3:4 */}
             <div className="w-full overflow-hidden bg-neutral-100" style={{ aspectRatio: "3/4" }}>
