@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mosaic Collective Platform 🎨
 
-## Getting Started
+A massive multiplayer geometric art-canvas platform built on Next.js, React, and Convex.
 
-First, run the development server:
+This project enables seamless collaborative image mapping by utilizing an advanced native math engine inside a `<canvas>` that transforms hundreds of individual photo contributions into a massive orchestrated grid matching a target master image format.
 
+## Architectural Highlights
+
+- **Infinite Canvas Engine (Frontend)**: Real-time geometric mapping algorithms natively animating, zooming, and tracking user-inserted coordinates via physical `Math.lerp()` translations.
+- **Client-Side Compression**: Native Javascript DOM parsing to automatically process user photos down into secure 250px matrices locally before engaging the network, dramatically mitigating storage bandwidth and load times.
+- **Backend Duplication Masking**: A native array-caching mechanism efficiently paints transparent "ghost grids" mapping approved photos infinitely. This keeps the application feeling visually full while technically preserving backend storage limit thresholds. 
+- **Admin Layout Generation Console**: Private endpoints calculating closest RGB match mapping algorithms via Euclidean distancing to securely determine the optimal location for each approved photo.
+
+## Technology Stack
+
+- **Framework**: [Next.js (App Router)](https://nextjs.org/)
+- **Frontend State**: [React 19](https://react.dev/)
+- **Backend & Database**: [Convex](https://convex.dev/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **File Storage**: Convex Blob Storage Integration 
+
+## Local Development Setup
+
+To run this platform locally:
+
+**1. Clone the project and install dependencies**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**2. Synchronize the backend & Start the frontend**
+Convex uses code execution protocols to guarantee safety in transit. Open two side-by-side terminal instances.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+In Terminal 1 (Launches the Next.js runtime server on port 3000):
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+In Terminal 2 (Spins up your remote dynamic API DB & hot-swaps endpoints):
+```bash
+npx convex dev
+```
 
-## Learn More
+### Usage
+- **Client Interface**: Enter `http://localhost:3000` to interact with the raw mosaic grid and search verified items.
+- **Admin Portal**: Enter `http://localhost:3000/admin` (Passcode: `mosaic2026`) to parse new submissions, verify authentic images, map grid bounds algebraically, and expand capacity.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment Notes
+- Ensure your `CONVEX_DEPLOYMENT` environment parameters are securely linked when setting up Vercel distributions.
+- To execute a final production build, you must run `npx convex deploy` which hard-links endpoints prior to standard Next.js building logic.
