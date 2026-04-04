@@ -12,7 +12,7 @@ export default function Home() {
   const activeGrid = useQuery(api.grid.getActiveGrid);
   const approvedSubmissions = useQuery(api.submissions.getApproved);
 
-  const [gridConfigState, setGridConfigState] = useState({ cols: 60, rows: 34 }); 
+  const [gridConfigState, setGridConfigState] = useState({ cols: 60, rows: 34 });
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [masterImage, setMasterImage] = useState<HTMLImageElement | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,7 +50,7 @@ export default function Home() {
 
     ctx.drawImage(img, 0, 0, cols, rows);
     const imageData = ctx.getImageData(0, 0, cols, rows).data;
-    
+
     const baseTiles: TileData[] = [];
     const totalCount = cols * rows;
 
@@ -70,7 +70,7 @@ export default function Home() {
     let active = true;
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = "/base-image.jpg"; 
+    img.src = "/base-image.jpg";
 
     img.onload = () => {
       if (!active) return;
@@ -88,18 +88,20 @@ export default function Home() {
     return () => { active = false; };
   }, [gridConfigState.cols, gridConfigState.rows]);
 
-  // Phase 4 Engine - The Infinite Auto-Duplication Algorithm
-  // Merges explicitly approved Convex submissions natively into the layout, and seamlessly fills edges
+  // Phase 4 Engine — Center-Outward Mosaic Fill Algorithm
+  // Merges approved submissions at their assigned positions, then fills remaining
+  // empty tiles with duplicates ordered by distance from grid center (closest first).
+  // This creates a natural "blooming" effect — dense in the center, sparse at edges.
   useEffect(() => {
     if (!approvedSubmissions || tiles.length === 0) return;
 
     setTiles(prev => {
       const next = [...prev];
       const validSubmissions = approvedSubmissions.filter(sub => sub.position !== undefined);
-      
+
       if (validSubmissions.length === 0) return next;
 
-      // 1. Overlay actual authenticated uploads into their native coordinates
+      // 1. Overlay real approved uploads at their admin-assigned grid coordinates
       validSubmissions.forEach(sub => {
         if (next[sub.position!]) {
           next[sub.position!] = {
@@ -111,25 +113,49 @@ export default function Home() {
         }
       });
 
-      // 2. Full-Frame Duplication Mapping
-      // To prevent empty white border lines when Admin expands grid, duplicate random approved tiles into empty spots
-      let sourceIndex = 0;
+      // 2. Center-Outward Duplication Fill
+      const cols = gridConfigState.cols;
+      const rows = gridConfigState.rows;
+      const centerCol = cols / 2;
+      const centerRow = rows / 2;
+
+      const emptyPositions: { index: number; dist: number }[] = [];
+
       for (let i = 0; i < next.length; i++) {
         if (!next[i].imageUrl) {
-          const cloneSource = validSubmissions[sourceIndex % validSubmissions.length];
-          next[i] = {
-             ...next[i],
-             imageUrl: cloneSource.url ?? undefined, // Duplicate visual only
-             name: undefined, // Do not duplicate metadata strictly for search purity
-             mobileNumber: undefined 
-          };
-          sourceIndex++;
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const dist = Math.sqrt((col - centerCol) ** 2 + (row - centerRow) ** 2);
+          // Deterministic jitter — same value per tile on every render (no reshuffling)
+          const jitter = ((i * 7 + col * 13 + row * 17) % 100) / 100 * 2.0 - 1.0;
+          emptyPositions.push({ index: i, dist: dist + jitter });
         }
       }
 
+      // Sort: closest to center first → images spread outward naturally
+      emptyPositions.sort((a, b) => a.dist - b.dist);
+
+      // Deterministic shuffle of source images for visual variety
+      const shuffledSources = [...validSubmissions];
+      const seed = validSubmissions.length * 3;
+      for (let i = shuffledSources.length - 1; i > 0; i--) {
+        const j = (i * seed + 7) % (i + 1);
+        [shuffledSources[i], shuffledSources[j]] = [shuffledSources[j], shuffledSources[i]];
+      }
+
+      emptyPositions.forEach(({ index }, fillIdx) => {
+        const cloneSource = shuffledSources[fillIdx % shuffledSources.length];
+        next[index] = {
+          ...next[index],
+          imageUrl: cloneSource.url ?? undefined,
+          name: undefined,         // Duplicates carry no metadata — search stays pure
+          mobileNumber: undefined,
+        };
+      });
+
       return next;
     });
-  }, [approvedSubmissions, tiles.length]);
+  }, [approvedSubmissions, tiles.length, gridConfigState.cols, gridConfigState.rows]);
 
 
   const handleSearch = (e: React.FormEvent) => {
@@ -156,7 +182,7 @@ export default function Home() {
 
   return (
     <div className="w-full h-full relative flex flex-col font-sans bg-white overflow-hidden">
-      
+
       {/* Absolute Header Overlay */}
       <header className="absolute top-0 left-0 right-0 z-20 flex justify-between items-center px-4 py-3 sm:px-6 sm:py-4 pointer-events-none">
         {/* Mirchi One logo — top left */}
