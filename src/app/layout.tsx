@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import DisableRightClick from "@/components/DisableRightClick";
 
 export const metadata: Metadata = {
   title: "Mosaic Collective",
@@ -30,6 +31,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="h-full flex flex-col overflow-hidden bg-background text-foreground">
+        <DisableRightClick />
         <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
