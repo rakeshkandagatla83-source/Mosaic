@@ -142,14 +142,26 @@ export function useCanvasEngine({ tiles, config, canvasRef, highlightedPosition 
         }
       }
 
-      // Blue highlight border for the searched tile
+      // Highlighted tile — thinner border + photo pop (skip blend, brighten)
       if (highlighted !== null && highlighted !== undefined && tile.position === highlighted) {
-        const borderWidth = Math.max(2, currentTileSize * 0.08);
+        // Repaint the tile without the hard-light blend so the real photo shows clearly
+        if (img && img.complete) {
+          ctx.save();
+          ctx.drawImage(img, x, y, drawSize, drawSize);
+          // Subtle white overlay to brighten/pop the tile
+          ctx.globalAlpha = 0.15;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(x, y, drawSize, drawSize);
+          ctx.restore();
+        }
+
+        // Thin blue border + soft glow
+        const borderWidth = Math.max(1.5, currentTileSize * 0.04);
         ctx.save();
-        ctx.strokeStyle = "#2563EB"; // Tailwind blue-600
+        ctx.strokeStyle = "#2563EB";
         ctx.lineWidth = borderWidth;
         ctx.shadowColor = "#3B82F6";
-        ctx.shadowBlur = borderWidth * 3;
+        ctx.shadowBlur = borderWidth * 2;
         ctx.strokeRect(
           x + borderWidth / 2,
           y + borderWidth / 2,
