@@ -72,7 +72,7 @@ export default function Home() {
     let active = true;
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = campaignConfig?.masterImageUrl || "/base-image.jpg";
+    img.src = (campaignConfig as any)?.masterImageUrl || "/base-image.jpg";
     img.onload = () => {
       if (!active) return;
       setMasterImage(img);
@@ -85,7 +85,7 @@ export default function Home() {
       setIsProcessingBase(false);
     };
     return () => { active = false; };
-  }, [campaignConfig?.masterImageUrl]);
+  }, [(campaignConfig as any)?.masterImageUrl]);
 
 
 
@@ -211,16 +211,16 @@ export default function Home() {
           <div className="w-full rounded-2xl overflow-hidden shadow-2xl mb-8 border border-white/10 ring-1 ring-white/10">
             {/* Desktop Banner: 16:9 */}
             <div className="hidden sm:block aspect-[16/9] relative bg-neutral-900">
-              {campaignConfig.desktopBannerUrl ? (
-                <img src={campaignConfig.desktopBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
+              {(campaignConfig as any).desktopBannerUrl ? (
+                <img src={(campaignConfig as any).desktopBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/20">Banner 16:9 Placeholder</div>
               )}
             </div>
             {/* Mobile Banner: 4:5 */}
             <div className="block sm:hidden aspect-[4/5] relative bg-neutral-900">
-              {campaignConfig.mobileBannerUrl ? (
-                <img src={campaignConfig.mobileBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
+              {(campaignConfig as any).mobileBannerUrl ? (
+                <img src={(campaignConfig as any).mobileBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/20">Banner 4:5 Placeholder</div>
               )}

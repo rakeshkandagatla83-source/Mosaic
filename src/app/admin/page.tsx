@@ -1028,13 +1028,13 @@ export default function AdminDashboard() {
             TAB: IMAGERY, CONTROLS, BULK
         ══════════════════════════════════════════════ */}
         {activeTab === "imagery" && campaignConfig && (
-          <CampaignImageryTab config={campaignConfig} onUpdate={updateConfigMutation} generateUploadUrl={generateUploadUrl} />
+          <CampaignImageryTab config={campaignConfig} onUpdate={(p) => updateConfigMutation(p).then(() => {})} generateUploadUrl={generateUploadUrl} />
         )}
 
         {activeTab === "controls" && campaignConfig && (
           <CampaignControlsTab 
              config={campaignConfig} 
-             onUpdate={updateConfigMutation} 
+             onUpdate={(p) => updateConfigMutation(p).then(() => {})} 
              approvedSubmissions={approvedSubmissions || []}
           />
         )}
