@@ -20,5 +20,20 @@ export function useImageCache() {
     return img;
   }
 
-  return { getImage };
+  // Preload a list of URLs into the shared cache immediately.
+  // Call this as soon as URLs are known so img.complete = true
+  // by the time the canvas draw loop needs them.
+  function preloadImages(urls: string[]) {
+    urls.forEach(url => {
+      if (!url) return;
+      const cacheKey = url.replace(/&retry=\d+/, '');
+      if (cache.has(cacheKey)) return; // already loading or loaded
+      const img = new Image();
+      img.crossOrigin = "Anonymous";
+      img.src = url;
+      cache.set(cacheKey, img);
+    });
+  }
+
+  return { getImage, preloadImages };
 }

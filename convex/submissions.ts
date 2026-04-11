@@ -46,6 +46,7 @@ export const createSubmission = mutation({
     storageId: v.id("_storage"),
     name: v.string(),
     mobileNumber: v.string(),
+    comment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("submissions", {
@@ -132,16 +133,81 @@ export const adminCreateSubmission = mutation({
     storageId: v.id("_storage"),
     name: v.string(),
     mobileNumber: v.string(),
+    comment: v.optional(v.string()),
     position: v.number(),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("submissions", {
-      storageId: args.storageId,
-      name: args.name,
-      mobileNumber: args.mobileNumber,
+      ...args,
       status: "approved",
-      position: args.position,
       createdAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Bulk upload for admin processing.
+ * Inserts a list of approved submission objects.
+ */
+export const bulkUpload = mutation({
+  args: {
+    submissions: v.array(v.object({
+      name: v.string(),
+      mobileNumber: v.string(),
+      comment: v.optional(v.string()),
+      storageId: v.id("_storage"),
+      position: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    for (const sub of args.submissions) {
+      // Create new approved submission
+      await ctx.db.insert("submissions", {
+        ...sub,
+        status: "approved",
+        createdAt: Date.now(),
+      });
+      // Important: Remove from bulkErrors if we had previously failed on this mobile number!
+      const existingErrors = await ctx.db
+        .query("bulkErrors")
+        .filter(q => q.eq(q.field("mobileNumber"), sub.mobileNumber))
+        .collect();
+      for (const err of existingErrors) {
+        await ctx.db.delete(err._id);
+      }
+    }
+  },
+});
+
+export const getBulkErrors = query({
+  handler: async (ctx) => {
+    return await ctx.db.query("bulkErrors").order("desc").collect();
+  },
+});
+
+export const logBulkErrors = mutation({
+  args: {
+    errors: v.array(v.object({
+      name: v.string(),
+      mobileNumber: v.string(),
+      comment: v.optional(v.string()),
+      fileName: v.string(),
+      errorType: v.union(v.literal("missing"), v.literal("duplicate"), v.literal("error")),
+    })),
+  },
+  handler: async (ctx, args) => {
+    for (const err of args.errors) {
+      await ctx.db.insert("bulkErrors", {
+        ...err,
+        createdAt: Date.now(),
+      });
+    }
+  },
+});
+
+export const removeBulkError = mutation({
+  args: { errorId: v.id("bulkErrors") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.errorId);
   },
 });

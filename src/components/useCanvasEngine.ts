@@ -113,8 +113,18 @@ export function useCanvasEngine({ tiles, config, canvasRef, highlightedPosition 
       const drawSize = currentTileSize + 0.5; // +0.5 eliminates sub-pixel gaps
 
       if (scale.current < 0.3 || !img || !img.complete) {
-        ctx.fillStyle = tile.avgColor || "#ffffff";
-        ctx.fillRect(x, y, drawSize, drawSize);
+        if (config.masterImage) {
+          ctx.drawImage(
+            config.masterImage,
+            col * mSliceW, row * mSliceH, mSliceW, mSliceH,
+            x, y, drawSize, drawSize
+          );
+          ctx.fillStyle = "rgba(0, 0, 0, 0.4)"; // dim empty slots slightly
+          ctx.fillRect(x, y, drawSize, drawSize);
+        } else {
+          ctx.fillStyle = tile.avgColor || "#ffffff";
+          ctx.fillRect(x, y, drawSize, drawSize);
+        }
       } else {
         ctx.drawImage(img, x, y, drawSize, drawSize);
 

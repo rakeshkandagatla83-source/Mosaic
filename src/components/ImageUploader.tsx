@@ -1,171 +1,286 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useCallback, useRef } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import Cropper from "react-easy-crop";
+import confetti from "canvas-confetti";
+
+interface Area {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
 
 export default function ImageUploader({ onClose }: { onClose: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  // Step Management: "upload" | "adjust" | "details" | "success"
+  const [step, setStep] = useState<"upload" | "adjust" | "details" | "success">("upload");
+
+  // Selection & Crop State
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  // Form State
   const [name, setName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
+  const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [finalBlob, setFinalBlob] = useState<Blob | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateUploadUrl = useMutation(api.submissions.generateUploadUrl);
   const createSubmission = useMutation(api.submissions.createSubmission);
 
-  // Compress the image down immediately via Canvas before saving
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    
-    setFile(null);
-    setPreview(null);
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        
-        // Target an ultra-lightweight 250x250 square constraint for speed
-        const TARGET_SIZE = 250;
-        canvas.width = TARGET_SIZE;
-        canvas.height = TARGET_SIZE;
-        
-        // Calculate crop to make it a perfect square
-        const minDim = Math.min(img.width, img.height);
-        const startX = (img.width - minDim) / 2;
-        const startY = (img.height - minDim) / 2;
-        
-        ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, TARGET_SIZE, TARGET_SIZE);
-        
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], selected.name, { type: "image/jpeg" });
-              setFile(compressedFile);
-              setPreview(URL.createObjectURL(compressedFile));
-            }
-          },
-          "image/jpeg",
-          0.85 // 85% compression quality provides immense bandwidth savings
-        );
-      };
-      if (typeof event.target?.result === "string") {
-        img.src = event.target.result;
-      }
-    };
-    reader.readAsDataURL(selected);
+  // 1. Handle File Selection
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        setImageSrc(reader.result as string);
+        setStep("adjust");
+      });
+      reader.readAsDataURL(e.target.files[0]);
+    }
   };
 
+  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // 2. Process Crop & Move to Details
+  const handleConfirmCrop = async () => {
+    if (!imageSrc || !croppedAreaPixels) return;
+
+    const img = new Image();
+    img.src = imageSrc;
+    await new Promise((resolve) => (img.onload = resolve));
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const TARGET_SIZE = 250;
+    canvas.width = TARGET_SIZE;
+    canvas.height = TARGET_SIZE;
+
+    ctx.drawImage(
+      img,
+      croppedAreaPixels.x,
+      croppedAreaPixels.y,
+      croppedAreaPixels.width,
+      croppedAreaPixels.height,
+      0,
+      0,
+      TARGET_SIZE,
+      TARGET_SIZE
+    );
+
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          setFinalBlob(blob);
+          setStep("details");
+        }
+      },
+      "image/jpeg",
+      0.85
+    );
+  };
+
+  // 3. Final Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !name || !mobileNumber) return;
+    if (!finalBlob || !name || !mobileNumber) return;
     setSubmitting(true);
 
     try {
-      // 1. Get secure POST URL from Convex
       const postUrl = await generateUploadUrl();
-      
-      // 2. Upload the compressed blob to Convex File Storage
       const result = await fetch(postUrl, {
         method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
+        headers: { "Content-Type": "image/jpeg" },
+        body: finalBlob,
       });
       const { storageId } = await result.json();
 
-      // 3. Document the submission into the database mapped to the storage pointer
       await createSubmission({
         storageId,
         name,
-        mobileNumber
+        mobileNumber,
+        comment: comment.trim() || undefined,
       });
 
-      alert("Photo submitted successfully for review!");
-      onClose();
+      // Celebration!
+      setStep("success");
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        zIndex: 100,
+      });
+
+      // Auto-close after 4 seconds
+      setTimeout(() => {
+        onClose();
+      }, 4000);
     } catch (error) {
       console.error("Submission error:", error);
-      alert("Failed to submit.");
-    } finally {
+      alert("Failed to submit. Please try again.");
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-neutral-400 hover:text-black transition-colors"
-        >
-          ✕
-        </button>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative border border-white/20">
         
-        <div className="p-8">
-          <h2 className="text-2xl font-bold tracking-tight text-neutral-900 mb-2">Join the Mosaic</h2>
-          <p className="text-sm text-neutral-500 mb-6">Upload your photo to become a permanent piece of the King Imam master portrait.</p>
+        {/* Close Button — hidden on success to focus on the message */}
+        {step !== "success" && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 w-10 h-10 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 rounded-full flex items-center justify-center transition-colors shadow-sm"
+          >
+            ✕
+          </button>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Your Photo</label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-neutral-300 border-dashed rounded-lg hover:bg-neutral-50 transition-colors">
-                <div className="space-y-1 text-center">
-                  {preview ? (
-                    <img src={preview} alt="Preview" className="mx-auto h-32 w-32 object-cover rounded-full border-4 border-white shadow-lg" />
-                  ) : (
-                    <div className="mx-auto h-12 w-12 text-neutral-400">
-                      <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  )}
-                  <div className="flex text-sm text-neutral-600 justify-center">
-                    <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                      <span>{preview ? 'Change Photo' : 'Upload a file'}</span>
-                      <input name="photo" type="file" className="sr-only" accept="image/*" onChange={handleFileChange} required />
-                    </label>
-                  </div>
-                  <p className="text-xs text-neutral-500 hidden sm:block">PNG, JPG up to 10MB (we'll compress it for you)</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                placeholder="John Doe"
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-neutral-400 text-black"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Mobile Number</label>
-              <input
-                type="tel"
-                placeholder="+1 (555) 000-0000"
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-neutral-400 text-black"
-                value={mobileNumber}
-                onChange={e => setMobileNumber(e.target.value)}
-                required
-              />
-              <p className="text-xs text-neutral-500 mt-1">This will be used for your personal "Find My Photo" search.</p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting || !file}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        {/* --- STEP 1: UPLOAD --- */}
+        {step === "upload" && (
+          <div className="p-8 text-center">
+            <h2 className="text-3xl font-black text-neutral-900 mb-2">Join the Collective</h2>
+            <p className="text-neutral-500 mb-8 font-medium">Be a part of the King Imam master portrait.</p>
+            
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="border-3 border-dashed border-neutral-200 rounded-3xl p-12 hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer group"
             >
-              {submitting ? "Uploading Securely..." : "Submit to Masterpiece"}
-            </button>
-          </form>
-        </div>
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <p className="font-bold text-neutral-700">Drag & drop or click to upload</p>
+              <p className="text-sm text-neutral-400 mt-1">Photos will be cropped to a perfect square.</p>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={onFileChange} 
+              />
+            </div>
+            
+            <p className="mt-8 text-xs text-neutral-400 uppercase tracking-widest font-bold">Secure Processing Enabled</p>
+          </div>
+        )}
+
+        {/* --- STEP 2: ADJUST --- */}
+        {step === "adjust" && imageSrc && (
+          <div className="flex flex-col h-[500px]">
+            <div className="p-6 border-b">
+              <h3 className="font-bold text-lg text-black">Position Your Photo</h3>
+              <p className="text-xs text-neutral-500">Drag to move, use your scroll wheel to zoom.</p>
+            </div>
+            <div className="flex-grow relative bg-neutral-100">
+              <Cropper
+                image={imageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                onCropChange={setCrop}
+                onCropComplete={onCropComplete}
+                onZoomChange={setZoom}
+                showGrid={true}
+              />
+            </div>
+            <div className="p-6 bg-white flex gap-3">
+              <button 
+                onClick={() => setStep("upload")}
+                className="flex-1 py-3 font-bold text-neutral-600 border border-neutral-200 rounded-2xl hover:bg-neutral-50"
+              >
+                Back
+              </button>
+              <button 
+                onClick={handleConfirmCrop}
+                className="flex-1 py-3 font-bold text-white bg-black rounded-2xl hover:bg-neutral-800 transition-transform active:scale-95"
+              >
+                Looks Good
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- STEP 3: DETAILS --- */}
+        {step === "details" && (
+          <div className="p-8">
+            <h3 className="text-2xl font-black text-neutral-900 mb-6">Final Details</h3>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Full Name</label>
+                <input
+                  autoFocus
+                  required
+                  type="text"
+                  placeholder="e.g. Rakesh K"
+                  className="w-full px-5 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl text-black outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Mobile Number</label>
+                <input
+                  required
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  className="w-full px-5 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl text-black outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  value={mobileNumber}
+                  onChange={e => setMobileNumber(e.target.value)}
+                />
+                <p className="text-[10px] text-neutral-400 mt-2">Required for the "Find My Photo" feature.</p>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Your Message (Optional)</label>
+                <textarea
+                  placeholder="Share a thought or just say hi..."
+                  className="w-full px-5 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl text-black outline-none focus:ring-2 focus:ring-blue-600 transition resize-none h-24"
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl shadow-xl shadow-blue-200 transition disabled:opacity-50"
+              >
+                {submitting ? "Securing Your Spot..." : "Complete Submission"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* --- STEP 4: SUCCESS --- */}
+        {step === "success" && (
+          <div className="p-12 text-center flex flex-col items-center">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-black text-neutral-900 mb-4">Submission Received!</h2>
+            <p className="text-neutral-500 leading-relaxed max-w-xs mx-auto mb-8">
+              Your photo is being mapped. <span className="text-blue-600 font-bold">Once all photos are uploaded, the campaign image will be revealed.</span>
+            </p>
+            <div className="flex items-center gap-2 text-neutral-400 text-sm font-medium italic">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              Closing in a moment...
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

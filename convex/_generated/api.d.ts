@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as config from "../config.js";
 import type * as grid from "../grid.js";
 import type * as submissions from "../submissions.js";
 
@@ -18,6 +19,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  config: typeof config;
   grid: typeof grid;
   submissions: typeof submissions;
 }>;

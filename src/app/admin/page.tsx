@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import MosaicCanvas from "@/components/MosaicCanvas";
+import { TileData } from "@/components/useCanvasEngine";
 
 /* ─────────────────────────────────────────────
    Admin Add User Modal
@@ -292,8 +294,7 @@ export default function AdminDashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
-  // Tab
-  const [activeTab, setActiveTab] = useState<"pending" | "approved">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "imagery" | "controls" | "bulk">("pending");
 
   // Pending list UI state
   const [pendingSearch, setPendingSearch] = useState("");
@@ -317,6 +318,12 @@ export default function AdminDashboard() {
   const adminCreateMutation = useMutation(api.submissions.adminCreateSubmission);
   const generateUploadUrl = useMutation(api.submissions.generateUploadUrl);
   const expandGridMutation = useMutation(api.grid.expandGrid);
+  
+  const campaignConfig = useQuery(api.config.getConfig);
+  const updateConfigMutation = useMutation(api.config.updateConfig);
+  const bulkUploadMutation = useMutation(api.submissions.bulkUpload);
+  const logBulkErrorsMutation = useMutation(api.submissions.logBulkErrors);
+  const bulkErrors = useQuery(api.submissions.getBulkErrors);
 
   const tileColorsRef = useRef<number[][]>([]);
 
@@ -441,6 +448,52 @@ export default function AdminDashboard() {
       };
       reader.readAsDataURL(file);
     });
+
+  const handleBulkProcess = async (results: any[]) => {
+    if (!activeGrid || !approvedSubmissions) return;
+    const takenPositions = new Set(approvedSubmissions.map(s => s.position));
+    const processedSubs = [];
+
+    for (const item of results) {
+      // 1. Map Position if not yet calculated.
+      let bestIndex = -1;
+      const img = new Image();
+      const p = new Promise(resolve => {
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = 1; c.height = 1;
+          const ctx = c.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, 1, 1);
+            // This is a simplified position mock for the rewrite.
+            const index = Array.from(Array(activeGrid.targetTotal).keys()).find(i => !takenPositions.has(i));
+            if (index !== undefined) {
+              takenPositions.add(index);
+              bestIndex = index;
+            }
+          }
+          resolve(true);
+        };
+      });
+      img.src = URL.createObjectURL(item.blob);
+      await p;
+
+      // 2. Upload blob
+      const postUrl = await generateUploadUrl();
+      const res = await fetch(postUrl, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: item.blob });
+      const { storageId } = await res.json();
+      
+      processedSubs.push({
+        name: item.name,
+        mobileNumber: item.mobile,
+        comment: item.comment,
+        storageId,
+        position: bestIndex !== -1 ? bestIndex : 0,
+      });
+    }
+
+    await bulkUploadMutation({ submissions: processedSubs });
+  };
 
   const handleEdit = async (id: Id<"submissions">, name: string, mobile: string, newFile: File | null) => {
     if (newFile) {
@@ -643,6 +696,42 @@ export default function AdminDashboard() {
                 {approvedSubmissions.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("imagery")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === "imagery"
+                ? "bg-black text-white shadow-sm"
+                : "text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${activeTab === "imagery" ? "bg-blue-400" : "bg-blue-300"}`} />
+            Imagery
+          </button>
+
+          <button
+            onClick={() => setActiveTab("controls")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === "controls"
+                ? "bg-black text-white shadow-sm"
+                : "text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${activeTab === "controls" ? "bg-amber-400" : "bg-amber-300"}`} />
+            Controls
+          </button>
+
+          <button
+            onClick={() => setActiveTab("bulk")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === "bulk"
+                ? "bg-black text-white shadow-sm"
+                : "text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${activeTab === "bulk" ? "bg-purple-400" : "bg-purple-300"}`} />
+            Bulk Upload
           </button>
         </div>
 
@@ -934,6 +1023,30 @@ export default function AdminDashboard() {
           )}
         </section>
         )}
+
+        {/* ══════════════════════════════════════════════
+            TAB: IMAGERY, CONTROLS, BULK
+        ══════════════════════════════════════════════ */}
+        {activeTab === "imagery" && campaignConfig && (
+          <CampaignImageryTab config={campaignConfig} onUpdate={updateConfigMutation} generateUploadUrl={generateUploadUrl} />
+        )}
+
+        {activeTab === "controls" && campaignConfig && (
+          <CampaignControlsTab 
+             config={campaignConfig} 
+             onUpdate={updateConfigMutation} 
+             approvedSubmissions={approvedSubmissions || []}
+          />
+        )}
+
+        {activeTab === "bulk" && (
+          <BulkUploadTab 
+             onBulkProcess={handleBulkProcess} 
+             existingSubmissions={approvedSubmissions || []} 
+             bulkErrors={bulkErrors || []}
+             logBulkErrorsMutation={logBulkErrorsMutation}
+          />
+        )}
       </div>
     </div>
   );
@@ -1027,4 +1140,519 @@ function PaginationBar({
     </div>
   );
 }
+
+/* ─────────────────────────────────────────────
+   CAMPAIGN IMAGERY TAB
+───────────────────────────────────────────── */
+function CampaignImageryTab({ config, onUpdate, generateUploadUrl }: { config: any, onUpdate: (p: any) => Promise<void>, generateUploadUrl: any }) {
+  const handleBannerUpload = async (type: "desktop" | "mobile" | "master", file: File) => {
+    const postUrl = await generateUploadUrl();
+    const result = await fetch(postUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    const { storageId } = await result.json();
+    const key = type === "desktop" ? "desktopBannerId" : type === "mobile" ? "mobileBannerId" : "masterImageId";
+    await onUpdate({ [key]: storageId });
+    alert(`${type} image updated!`);
+  };
+
+  return (
+    <div className="space-y-6 text-black">
+      <h3 className="text-xl font-bold flex items-center gap-2">
+        <span className="p-2 bg-blue-100 rounded-lg text-blue-600">🖼️</span>
+        Campaign Imagery
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        {/* Desktop Banner */}
+        <div className="bg-white border p-6 rounded-2xl shadow-sm">
+          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Desktop Banner</label>
+          <p className="text-xs text-neutral-400 mb-3">Shown on screens wider than 640px. Ideal ratio: 16:9</p>
+          <div className="aspect-[16/9] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
+            {config.desktopBannerUrl ? (
+              <img src={config.desktopBannerUrl} className="w-full h-full object-cover" alt="desktop banner" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-neutral-300 text-sm">No Image</div>
+            )}
+            <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer text-white font-bold">
+              Replace
+              <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleBannerUpload("desktop", e.target.files[0])} />
+            </label>
+          </div>
+        </div>
+
+        {/* Mobile Banner */}
+        <div className="bg-white border p-6 rounded-2xl shadow-sm">
+          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Mobile Banner</label>
+          <p className="text-xs text-neutral-400 mb-3">Shown on screens narrower than 640px. Ideal ratio: 4:5</p>
+          <div className="aspect-[4/5] w-full max-w-[200px] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
+            {config.mobileBannerUrl ? (
+              <img src={config.mobileBannerUrl} className="w-full h-full object-cover" alt="mobile banner" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-neutral-300 text-sm">No Image</div>
+            )}
+            <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer text-white font-bold">
+              Replace
+              <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleBannerUpload("mobile", e.target.files[0])} />
+            </label>
+          </div>
+        </div>
+
+        {/* Master Background */}
+        <div className="bg-white border p-6 rounded-2xl shadow-sm">
+          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Main Background</label>
+          <p className="text-xs text-neutral-400 mb-3">The master image used as the mosaic base layer.</p>
+          <div className="aspect-[16/9] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
+            {config.masterImageUrl ? (
+              <img src={config.masterImageUrl} className="w-full h-full object-cover" alt="master" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-neutral-300 text-sm">No Image</div>
+            )}
+            <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer text-white font-bold">
+              Replace
+              <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleBannerUpload("master", e.target.files[0])} />
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+
+/* ─────────────────────────────────────────────
+   ADMIN MOSAIC PREVIEW (real photos only, no duplicates)
+───────────────────────────────────────────── */
+function AdminMosaicPreview({ 
+  approvedSubmissions, 
+  masterImageUrl 
+}: { 
+  approvedSubmissions: any[];
+  masterImageUrl?: string;
+}) {
+  const activeGrid = useQuery(api.grid.getActiveGrid);
+  const [tiles, setTiles] = useState<TileData[]>([]);
+  const [masterImage, setMasterImage] = useState<HTMLImageElement | null>(null);
+
+  const gridCols = activeGrid?.cols ?? 60;
+  const gridRows = activeGrid?.rows ?? 34;
+
+  // Load master image
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = masterImageUrl || "/base-image.jpg";
+    img.onload = () => setMasterImage(img);
+  }, [masterImageUrl]);
+
+  // Build tiles from approved submissions only — NO duplicate fill
+  useEffect(() => {
+    const total = gridCols * gridRows;
+    const base: TileData[] = Array.from({ length: total }, (_, i) => ({ position: i }));
+
+    approvedSubmissions.forEach(sub => {
+      if (sub.position !== undefined && sub.position < total) {
+        base[sub.position] = {
+          position: sub.position,
+          imageUrl: sub.url ?? undefined,
+          name: sub.name,
+          mobileNumber: sub.mobileNumber,
+        };
+      }
+    });
+
+    setTiles(base);
+  }, [approvedSubmissions, gridCols, gridRows]);
+
+  const mosaicConfig = useMemo(() => ({
+    gridCols,
+    gridRows,
+    tileSize: 15,
+    masterImage,
+  }), [gridCols, gridRows, masterImage]);
+
+  return (
+    <div className="absolute inset-0">
+      <MosaicCanvas tiles={tiles} config={mosaicConfig} highlightedPosition={null} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   CAMPAIGN CONTROLS TAB
+───────────────────────────────────────────── */
+function CampaignControlsTab({ 
+  config, 
+  onUpdate,
+  approvedSubmissions
+}: { 
+  config: any; 
+  onUpdate: (p: any) => Promise<void>;
+  approvedSubmissions: any[];
+}) {
+  const [subTab, setSubTab] = useState<"settings" | "preview">("preview");
+  const [targetGoal, setTargetGoal] = useState<number>(config?.targetGoal || 2039);
+  const [loadPreview, setLoadPreview] = useState(false);
+
+  const goal = config?.targetGoal || 2039;
+  const currentCount = approvedSubmissions.length;
+  const rawProgress = (currentCount / goal) * 100;
+  const displayProgress = currentCount > 0 && rawProgress < 1 
+    ? Number(rawProgress.toFixed(1)) 
+    : Math.min(100, Math.floor(rawProgress));
+
+  return (
+    <div className="text-black max-w-5xl mx-auto space-y-6">
+      <div className="flex bg-white p-1 rounded-2xl border w-fit mx-auto mb-8 shadow-sm">
+        <button onClick={() => setSubTab("settings")} className={`px-8 py-3 rounded-xl text-sm font-bold capitalize transition-all ${subTab === "settings" ? 'bg-black text-white shadow-xl' : 'text-neutral-500 hover:text-black'}`}>⚙️ Settings</button>
+        <button onClick={() => setSubTab("preview")} className={`px-8 py-3 rounded-xl text-sm font-bold capitalize transition-all ${subTab === "preview" ? 'bg-black text-white shadow-xl' : 'text-neutral-500 hover:text-black'}`}>🚀 Launch Preview</button>
+      </div>
+
+      {subTab === "settings" && (
+        <div className="bg-white border p-8 rounded-3xl shadow-sm max-w-2xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+          <label className="block font-bold text-lg mb-1">Target Achievement Goal</label>
+          <div className="flex gap-2">
+            <input type="number" className="w-full max-w-[120px] px-4 py-3 border rounded-xl" value={targetGoal} onChange={e => setTargetGoal(parseInt(e.target.value))} />
+            <button onClick={() => { onUpdate({ targetGoal }); alert("Goal Updated"); }} className="px-6 py-3 bg-black text-white rounded-xl font-bold">Set Goal</button>
+          </div>
+        </div>
+      )}
+
+      {subTab === "preview" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-300">
+          <div className="lg:col-span-8 space-y-4">
+            <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
+              <div>
+                <h3 className="font-bold text-lg">Mosaic Fill Preview</h3>
+                <p className="text-xs text-neutral-500">Real approved photos only — no duplicates.</p>
+              </div>
+              <button onClick={() => setLoadPreview(!loadPreview)} className={`px-4 py-2 rounded-xl text-sm font-bold transition ${loadPreview ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{loadPreview ? "Turn Off Preview" : "▶ Load Preview"}</button>
+            </div>
+            <div className="w-full aspect-video bg-neutral-900 rounded-3xl border-4 border-neutral-800 shadow-2xl relative overflow-hidden flex items-center justify-center">
+              {!loadPreview ? (
+                <div className="text-center text-neutral-500"><span className="text-4xl mb-4 block">👀</span><p className="font-bold">Preview is Offline</p><p className="text-sm mt-1 text-neutral-600">Click Load Preview to render the mosaic.</p></div>
+              ) : (
+                <AdminMosaicPreview approvedSubmissions={approvedSubmissions} masterImageUrl={config?.masterImageUrl} />
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white border p-6 rounded-3xl shadow-sm">
+              <h4 className="text-sm font-bold text-neutral-400 uppercase">Campaign Progress</h4>
+              <div className="text-4xl font-black my-2">{displayProgress}%</div>
+              <p className="text-sm text-neutral-600 mb-4">{currentCount} / {goal} approved photos.</p>
+              <div className="h-2 w-full bg-neutral-100 rounded-full"><div className="h-full bg-blue-600" style={{ width: `${displayProgress}%` }}></div></div>
+            </div>
+
+            <div className="bg-white border p-6 rounded-3xl shadow-sm space-y-6">
+              <h4 className="text-sm font-bold text-neutral-400 uppercase">Launch Sequencing</h4>
+              <div className="flex items-start justify-between">
+                <div><p className="font-bold">1. Duplicate Fill</p><p className="text-xs text-neutral-500">Fill empty slots.</p></div>
+                <button onClick={() => onUpdate({ useDuplicatedFill: !config.useDuplicatedFill })} className={`shrink-0 w-12 h-6 rounded-full relative ${config.useDuplicatedFill ? 'bg-blue-500' : 'bg-neutral-300'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full ${config.useDuplicatedFill ? 'left-7' : 'left-1'}`} /></button>
+              </div>
+              <div className="flex items-start justify-between border-t pt-4">
+                <div><p className="font-bold">2. Go Live</p><p className="text-xs text-neutral-500">Reveal mosaic.</p></div>
+                <button onClick={() => onUpdate({ isLive: !config.isLive })} className={`shrink-0 w-12 h-6 rounded-full relative ${config.isLive ? 'bg-green-500' : 'bg-neutral-300'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full ${config.isLive ? 'left-7' : 'left-1'}`} /></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   BULK UPLOAD TAB
+───────────────────────────────────────────── */
+interface BulkRow {
+  name: string;
+  mobile: string;
+  comment: string;
+  fileName: string;
+  file?: File;
+  status: "pending" | "matched" | "missing" | "duplicate" | "error";
+  error?: string;
+}
+
+function BulkUploadTab({ 
+  onBulkProcess, 
+  existingSubmissions,
+  bulkErrors,
+  logBulkErrorsMutation
+}: { 
+  onBulkProcess: (results: any[]) => Promise<void>;
+  existingSubmissions: any[];
+  bulkErrors: any[];
+  logBulkErrorsMutation: any;
+}) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [csvText, setCsvText] = useState("");
+  const [rows, setRows] = useState<BulkRow[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [resultTab, setResultTab] = useState<"processed" | "errors">("processed");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const existingMobiles = new Set(existingSubmissions.map(s => s.mobileNumber));
+
+  const parseCSV = () => {
+    const lines = csvText.trim().split("\n").filter(l => l.trim());
+    const parsed: BulkRow[] = [];
+    const seenMobiles = new Set<string>();
+
+    for (const line of lines) {
+      const parts = line.split(",").map(p => p.trim());
+      if (parts.length < 3) continue;
+      const [name, mobile, comment, fileName = ""] = parts;
+      let status: BulkRow["status"] = "pending";
+      let error: string | undefined;
+
+      if (existingMobiles.has(mobile)) {
+        status = "duplicate";
+        error = "Already in mosaic";
+      } else if (seenMobiles.has(mobile)) {
+        status = "duplicate";
+        error = "Duplicate in this batch";
+      } else {
+        seenMobiles.add(mobile);
+      }
+
+      parsed.push({ name, mobile, comment, fileName, status });
+    }
+    setRows(parsed);
+    setStep(2);
+  };
+
+  const handleImageFiles = (files: FileList) => {
+    const arr = Array.from(files);
+    setImageFiles(prev => [...prev, ...arr]);
+
+    setRows(prev => prev.map(row => {
+      if (row.status === "duplicate") return row;
+      const matchedFile = arr.find(f => 
+        f.name.toLowerCase() === row.fileName.toLowerCase() ||
+        f.name.toLowerCase().includes(row.mobile)
+      );
+      if (matchedFile) {
+        return { ...row, file: matchedFile, status: "matched" };
+      }
+      // If still no match and was pending, mark missing
+      if (!row.file && row.status === "pending") {
+        return { ...row, status: "missing", error: "No matching image file" };
+      }
+      return row;
+    }));
+  };
+
+  const handleProcess = async () => {
+    const toProcess = rows.filter(r => r.status === "matched" && r.file);
+    if (toProcess.length === 0) {
+      alert("No matched rows to process.");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await onBulkProcess(toProcess.map(r => ({
+        name: r.name,
+        mobile: r.mobile,
+        comment: r.comment,
+        blob: r.file!,
+      })));
+
+      // Log errors
+      const errorRows = rows.filter(r => r.status === "missing" || r.status === "duplicate" || r.status === "error");
+      if (errorRows.length > 0 && logBulkErrorsMutation) {
+        for (const er of errorRows) {
+          await logBulkErrorsMutation({ name: er.name, mobileNumber: er.mobile, comment: er.comment, fileName: er.fileName, errorType: er.error || er.status });
+        }
+      }
+
+      setStep(3);
+    } catch (e) {
+      console.error(e);
+      alert("Bulk processing failed. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const processedRows = rows.filter(r => r.status === "matched");
+  const errorRows = rows.filter(r => r.status !== "matched");
+
+  return (
+    <div className="space-y-6 text-black">
+      <h3 className="text-xl font-bold flex items-center gap-2">
+        <span className="p-2 bg-purple-100 rounded-lg text-purple-600">📦</span>
+        Bulk Upload
+      </h3>
+
+      {/* Stepper */}
+      <div className="flex items-center gap-2 mb-6">
+        {([1, 2, 3] as const).map((s, i) => (
+          <div key={s} className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${step >= s ? 'bg-black text-white' : 'bg-neutral-200 text-neutral-500'}`}>{s}</div>
+            <span className="text-sm font-medium hidden sm:inline">{["Paste CSV", "Match Images", "Review & Process"][i]}</span>
+            {i < 2 && <div className={`h-0.5 w-8 ${step > s ? 'bg-black' : 'bg-neutral-200'}`} />}
+          </div>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="bg-white border p-6 rounded-2xl shadow-sm space-y-4">
+          <div>
+            <label className="block font-bold mb-1">Paste CSV Data</label>
+            <p className="text-sm text-neutral-500 mb-3">Format: <code className="bg-neutral-100 px-1 rounded">Name, Mobile, Comment, FileName.jpg</code> (one per line)</p>
+            <textarea
+              className="w-full h-48 border rounded-xl p-3 text-sm font-mono outline-none focus:ring-2 focus:ring-black resize-none"
+              placeholder={"John Doe, 9876543210, Great campaign!, john.jpg\nJane Smith, 9123456789, Love this!, jane.jpg"}
+              value={csvText}
+              onChange={e => setCsvText(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={parseCSV}
+            disabled={!csvText.trim()}
+            className="px-6 py-2.5 bg-black text-white rounded-xl font-bold hover:bg-neutral-800 transition disabled:opacity-40"
+          >
+            Parse CSV →
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="bg-white border p-6 rounded-2xl shadow-sm space-y-4">
+            <label className="block font-bold mb-1">Upload Image Files</label>
+            <p className="text-sm text-neutral-500">Upload all images at once. They will be auto-matched by filename or mobile number.</p>
+            <div
+              className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:bg-neutral-50 transition"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="text-3xl mb-2">📁</div>
+              <p className="font-bold text-neutral-700">{imageFiles.length > 0 ? `${imageFiles.length} files loaded` : "Click to select images"}</p>
+              <p className="text-sm text-neutral-400 mt-1">or drag & drop</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={e => e.target.files && handleImageFiles(e.target.files)}
+              />
+            </div>
+          </div>
+
+          <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+            <div className="grid grid-cols-[1fr_140px_100px_120px] gap-3 px-5 py-3 bg-neutral-50 border-b text-xs font-bold text-neutral-400 uppercase tracking-wider">
+              <div>Name / Mobile</div>
+              <div>File</div>
+              <div className="text-center">Status</div>
+              <div>Error</div>
+            </div>
+            <div className="divide-y max-h-72 overflow-y-auto">
+              {rows.map((row, i) => (
+                <div key={i} className="grid grid-cols-[1fr_140px_100px_120px] gap-3 items-center px-5 py-3">
+                  <div>
+                    <div className="font-semibold text-sm">{row.name}</div>
+                    <div className="text-xs text-neutral-500 font-mono">{row.mobile}</div>
+                  </div>
+                  <div className="text-xs text-neutral-500 truncate">{row.fileName || "—"}</div>
+                  <div className="text-center">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      row.status === "matched" ? "bg-green-100 text-green-700" :
+                      row.status === "duplicate" ? "bg-orange-100 text-orange-700" :
+                      row.status === "missing" ? "bg-red-100 text-red-600" :
+                      "bg-neutral-100 text-neutral-500"
+                    }`}>
+                      {row.status}
+                    </span>
+                  </div>
+                  <div className="text-xs text-red-500">{row.error || ""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={() => setStep(1)} className="px-6 py-2.5 border rounded-xl font-bold hover:bg-neutral-50 transition">← Back</button>
+            <button
+              onClick={handleProcess}
+              disabled={isProcessing || rows.filter(r => r.status === "matched").length === 0}
+              className="px-6 py-2.5 bg-black text-white rounded-xl font-bold hover:bg-neutral-800 transition disabled:opacity-40"
+            >
+              {isProcessing ? "Processing..." : `Process ${rows.filter(r => r.status === "matched").length} Matched →`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="space-y-4">
+          <div className="flex bg-white p-1 rounded-2xl border w-fit shadow-sm">
+            <button onClick={() => setResultTab("processed")} className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${resultTab === "processed" ? 'bg-black text-white' : 'text-neutral-500'}`}>
+              ✅ Processed ({processedRows.length})
+            </button>
+            <button onClick={() => setResultTab("errors")} className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${resultTab === "errors" ? 'bg-black text-white' : 'text-neutral-500'}`}>
+              ⚠️ Action Required ({errorRows.length})
+            </button>
+          </div>
+
+          {resultTab === "processed" ? (
+            <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+              <div className="divide-y max-h-96 overflow-y-auto">
+                {processedRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-3">
+                    <span className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">✓</span>
+                    <div>
+                      <div className="font-semibold text-sm">{row.name}</div>
+                      <div className="text-xs text-neutral-500 font-mono">{row.mobile}</div>
+                    </div>
+                  </div>
+                ))}
+                {processedRows.length === 0 && <div className="px-5 py-8 text-center text-neutral-400">No items processed.</div>}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+              <div className="divide-y max-h-96 overflow-y-auto">
+                {errorRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-3">
+                    <span className="w-5 h-5 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-xs font-bold">!</span>
+                    <div className="flex-1">
+                      <div className="font-semibold text-sm">{row.name} — <span className="font-mono text-xs">{row.mobile}</span></div>
+                      <div className="text-xs text-red-500">{row.error || row.status}</div>
+                    </div>
+                  </div>
+                ))}
+                {errorRows.length === 0 && <div className="px-5 py-8 text-center text-neutral-400">No errors — everything processed!</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Also show historical bulk errors if any */}
+          {bulkErrors && bulkErrors.length > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+              <p className="text-sm font-bold text-orange-700 mb-2">Past Unresolved Errors ({bulkErrors.length})</p>
+              <div className="space-y-1">
+                {bulkErrors.map((e: any) => (
+                  <div key={e._id} className="text-xs text-orange-600">{e.name} ({e.mobileNumber}) — {e.errorType}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={() => { setStep(1); setCsvText(""); setRows([]); setImageFiles([]); }} className="px-6 py-2.5 border rounded-xl font-bold hover:bg-neutral-50 transition">
+            Start New Batch
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
