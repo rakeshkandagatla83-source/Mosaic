@@ -205,24 +205,24 @@ export default function Home() {
 
       {/* --- LAYER 2: LANDING PAGE (Admin Banners & CTA) --- */}
       <div className={`absolute inset-0 z-40 bg-black/20 flex flex-col items-center justify-center transition-all duration-1000 ${isLive ? 'opacity-0 pointer-events-none translate-y-20' : 'opacity-100'}`}>
-        <div className="w-full max-w-5xl px-6 flex flex-col items-center text-center">
+        <div className="w-full max-w-2xl px-6 flex flex-col items-center text-center gap-6">
           
-          {/* Responsive Banners */}
-          <div className="w-full rounded-2xl overflow-hidden shadow-2xl mb-8 border border-white/10 ring-1 ring-white/10">
-            {/* Desktop Banner: 16:9 */}
+          {/* Responsive Banners — aspect-ratio class handles proportions correctly */}
+          <div className="w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/10">
+            {/* Desktop Banner: strict 16:9 */}
             <div className="hidden sm:block aspect-[16/9] relative bg-neutral-900">
               {(campaignConfig as any).desktopBannerUrl ? (
-                <img src={(campaignConfig as any).desktopBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
+                <img src={(campaignConfig as any).desktopBannerUrl} className="absolute inset-0 w-full h-full object-cover" alt="Campaign Banner" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/20">Banner 16:9 Placeholder</div>
+                <div className="w-full h-full flex items-center justify-center text-white/20">Banner 16:9</div>
               )}
             </div>
-            {/* Mobile Banner: 4:5 */}
+            {/* Mobile Banner: strict 4:5 */}
             <div className="block sm:hidden aspect-[4/5] relative bg-neutral-900">
               {(campaignConfig as any).mobileBannerUrl ? (
-                <img src={(campaignConfig as any).mobileBannerUrl} className="w-full h-full object-cover" alt="Campaign Banner" />
+                <img src={(campaignConfig as any).mobileBannerUrl} className="absolute inset-0 w-full h-full object-cover" alt="Campaign Banner" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/20">Banner 4:5 Placeholder</div>
+                <div className="w-full h-full flex items-center justify-center text-white/20">Banner 4:5</div>
               )}
             </div>
           </div>

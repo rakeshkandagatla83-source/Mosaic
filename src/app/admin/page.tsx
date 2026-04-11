@@ -1168,8 +1168,11 @@ function CampaignImageryTab({ config, onUpdate, generateUploadUrl }: { config: a
 
         {/* Desktop Banner */}
         <div className="bg-white border p-6 rounded-2xl shadow-sm">
-          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Desktop Banner</label>
-          <p className="text-xs text-neutral-400 mb-3">Shown on screens wider than 640px. Ideal ratio: 16:9</p>
+          <label className="block text-sm font-bold text-neutral-500 mb-1 uppercase tracking-wide">Desktop Banner</label>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-blue-200">1280 × 720 px</span>
+            <span className="text-xs text-neutral-400">16:9 · shown on desktop</span>
+          </div>
           <div className="aspect-[16/9] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
             {config.desktopBannerUrl ? (
               <img src={config.desktopBannerUrl} className="w-full h-full object-cover" alt="desktop banner" />
@@ -1185,8 +1188,11 @@ function CampaignImageryTab({ config, onUpdate, generateUploadUrl }: { config: a
 
         {/* Mobile Banner */}
         <div className="bg-white border p-6 rounded-2xl shadow-sm">
-          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Mobile Banner</label>
-          <p className="text-xs text-neutral-400 mb-3">Shown on screens narrower than 640px. Ideal ratio: 4:5</p>
+          <label className="block text-sm font-bold text-neutral-500 mb-1 uppercase tracking-wide">Mobile Banner</label>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-purple-200">1080 × 1350 px</span>
+            <span className="text-xs text-neutral-400">4:5 · shown on mobile</span>
+          </div>
           <div className="aspect-[4/5] w-full max-w-[200px] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
             {config.mobileBannerUrl ? (
               <img src={config.mobileBannerUrl} className="w-full h-full object-cover" alt="mobile banner" />
@@ -1202,8 +1208,11 @@ function CampaignImageryTab({ config, onUpdate, generateUploadUrl }: { config: a
 
         {/* Master Background */}
         <div className="bg-white border p-6 rounded-2xl shadow-sm">
-          <label className="block text-sm font-bold text-neutral-500 mb-2 uppercase tracking-wide">Main Background</label>
-          <p className="text-xs text-neutral-400 mb-3">The master image used as the mosaic base layer.</p>
+          <label className="block text-sm font-bold text-neutral-500 mb-1 uppercase tracking-wide">Main Background</label>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">1920 × 1080 px</span>
+            <span className="text-xs text-neutral-400">16:9 · mosaic base layer</span>
+          </div>
           <div className="aspect-[16/9] bg-neutral-100 rounded-xl overflow-hidden relative group border-2 border-dashed border-neutral-200">
             {config.masterImageUrl ? (
               <img src={config.masterImageUrl} className="w-full h-full object-cover" alt="master" />
