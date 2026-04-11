@@ -207,9 +207,9 @@ export default function Home() {
       <div className={`absolute inset-0 z-40 bg-black/20 flex flex-col items-center justify-center transition-all duration-1000 ${isLive ? 'opacity-0 pointer-events-none translate-y-20' : 'opacity-100'}`}>
         <div className="w-full max-w-2xl px-6 flex flex-col items-center text-center gap-6">
           
-          {/* Responsive Banners — aspect-ratio class handles proportions correctly */}
+          {/* Responsive Banners */}
           <div className="w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/10">
-            {/* Desktop Banner: strict 16:9 */}
+            {/* Desktop Banner: 16:9 */}
             <div className="hidden sm:block aspect-[16/9] relative bg-neutral-900">
               {(campaignConfig as any).desktopBannerUrl ? (
                 <img src={(campaignConfig as any).desktopBannerUrl} className="absolute inset-0 w-full h-full object-cover" alt="Campaign Banner" />
@@ -217,25 +217,26 @@ export default function Home() {
                 <div className="w-full h-full flex items-center justify-center text-white/20">Banner 16:9</div>
               )}
             </div>
-            {/* Mobile Banner: strict 4:5 */}
-            <div className="block sm:hidden aspect-[4/5] relative bg-neutral-900">
+            {/* Mobile Banner: rendered as 4:3 crop to avoid dominating the screen
+                The admin uploads a 4:5 image; object-cover crops top/bottom edges (content is centred) */}
+            <div className="block sm:hidden aspect-[4/3] relative bg-neutral-900">
               {(campaignConfig as any).mobileBannerUrl ? (
-                <img src={(campaignConfig as any).mobileBannerUrl} className="absolute inset-0 w-full h-full object-cover" alt="Campaign Banner" />
+                <img src={(campaignConfig as any).mobileBannerUrl} className="absolute inset-0 w-full h-full object-cover object-center" alt="Campaign Banner" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/20">Banner 4:5</div>
+                <div className="w-full h-full flex items-center justify-center text-white/20">Banner</div>
               )}
             </div>
           </div>
 
           <button
             onClick={() => setIsModalOpen(true)}
-            className="group relative inline-flex items-center justify-center px-10 py-5 font-bold text-white transition-all duration-200 bg-blue-600 font-pj rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 overflow-hidden hover:scale-105 active:scale-95 shadow-xl shadow-blue-900/40"
+            className="group relative w-full sm:w-auto inline-flex items-center justify-center px-6 py-4 sm:px-10 sm:py-5 font-bold text-white transition-all duration-200 bg-blue-600 font-pj rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 overflow-hidden hover:scale-105 active:scale-95 shadow-xl shadow-blue-900/40 text-sm sm:text-base"
           >
             <span className="relative">Join the Collective — Upload Your Photo</span>
           </button>
 
           {/* Progress Section */}
-          <div className="mt-12 w-full max-w-md">
+          <div className="w-full max-w-md">
             <div className="flex justify-between items-end mb-3">
               <span className="text-white font-black text-lg tracking-tight">Campaign Progress</span>
               <span className="text-blue-400 font-black text-2xl">{progress}%</span>
@@ -254,21 +255,21 @@ export default function Home() {
       </div>
 
       {/* --- LAYER 3: LIVE SEARCH (Only visible when revealed) --- */}
-      <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 transition-all duration-1000 delay-500 ${isLive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`}>
+      <div className={`absolute bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 transition-all duration-1000 delay-500 ${isLive ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`}>
         <form
           onSubmit={handleSearch}
           className="flex items-center bg-white rounded-full shadow-2xl overflow-hidden ring-4 ring-blue-600/20"
         >
           <input
             type="tel"
-            placeholder="Search Your Photo By Mobile Number"
-            className="flex-grow bg-transparent px-6 py-4 text-sm sm:text-base outline-none text-neutral-800 placeholder:text-neutral-400 font-bold"
+            placeholder="Search by Mobile Number"
+            className="flex-grow bg-transparent px-4 sm:px-6 py-3.5 sm:py-4 text-sm outline-none text-neutral-800 placeholder:text-neutral-400 font-bold"
             value={searchMobile}
             onChange={e => setSearchMobile(e.target.value)}
           />
           <button
             type="submit"
-            className="m-1.5 px-8 py-3.5 rounded-full text-white font-black text-sm tracking-widest uppercase transition-all hover:bg-neutral-800 bg-black shadow-lg"
+            className="m-1.5 px-5 sm:px-8 py-3 sm:py-3.5 rounded-full text-white font-black text-sm tracking-widest uppercase transition-all hover:bg-neutral-800 bg-black shadow-lg"
           >
             Search
           </button>

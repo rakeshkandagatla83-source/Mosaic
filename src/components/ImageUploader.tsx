@@ -149,21 +149,21 @@ export default function ImageUploader({ onClose }: { onClose: () => void }) {
 
         {/* --- STEP 1: UPLOAD --- */}
         {step === "upload" && (
-          <div className="p-8 text-center">
-            <h2 className="text-3xl font-black text-neutral-900 mb-2">Join the Collective</h2>
-            <p className="text-neutral-500 mb-8 font-medium">Be a part of the King Imam master portrait.</p>
+          <div className="p-5 sm:p-8 text-center">
+            <h2 className="text-2xl sm:text-3xl font-black text-neutral-900 mb-2">Join the Collective</h2>
+            <p className="text-neutral-500 mb-5 sm:mb-8 font-medium">Be a part of the King Imam master portrait.</p>
             
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="border-3 border-dashed border-neutral-200 rounded-3xl p-12 hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer group"
+              className="border-3 border-dashed border-neutral-200 rounded-3xl p-8 sm:p-12 hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer group"
             >
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                <svg className="w-7 h-7 sm:w-8 sm:h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
               </div>
-              <p className="font-bold text-neutral-700">Drag & drop or click to upload</p>
-              <p className="text-sm text-neutral-400 mt-1">Photos will be cropped to a perfect square.</p>
+              <p className="font-bold text-neutral-700 text-sm sm:text-base">Tap to upload your photo</p>
+              <p className="text-xs sm:text-sm text-neutral-400 mt-1">Photos will be cropped to a perfect square.</p>
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -173,16 +173,16 @@ export default function ImageUploader({ onClose }: { onClose: () => void }) {
               />
             </div>
             
-            <p className="mt-8 text-xs text-neutral-400 uppercase tracking-widest font-bold">Secure Processing Enabled</p>
+            <p className="mt-5 sm:mt-8 text-xs text-neutral-400 uppercase tracking-widest font-bold">Secure Processing Enabled</p>
           </div>
         )}
 
         {/* --- STEP 2: ADJUST --- */}
         {step === "adjust" && imageSrc && (
-          <div className="flex flex-col h-[500px]">
-            <div className="p-6 border-b">
-              <h3 className="font-bold text-lg text-black">Position Your Photo</h3>
-              <p className="text-xs text-neutral-500">Drag to move, use your scroll wheel to zoom.</p>
+          <div className="flex flex-col" style={{ height: 'min(500px, 70vh)' }}>
+            <div className="p-4 sm:p-6 border-b">
+              <h3 className="font-bold text-base sm:text-lg text-black">Position Your Photo</h3>
+              <p className="text-xs text-neutral-500">Drag to move · pinch or scroll to zoom.</p>
             </div>
             <div className="flex-grow relative bg-neutral-100">
               <Cropper
@@ -215,9 +215,9 @@ export default function ImageUploader({ onClose }: { onClose: () => void }) {
 
         {/* --- STEP 3: DETAILS --- */}
         {step === "details" && (
-          <div className="p-8">
-            <h3 className="text-2xl font-black text-neutral-900 mb-6">Final Details</h3>
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="p-5 sm:p-8">
+            <h3 className="text-xl sm:text-2xl font-black text-neutral-900 mb-4 sm:mb-6">Final Details</h3>
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               <div>
                 <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Full Name</label>
                 <input
@@ -265,7 +265,7 @@ export default function ImageUploader({ onClose }: { onClose: () => void }) {
 
         {/* --- STEP 4: SUCCESS --- */}
         {step === "success" && (
-          <div className="p-12 text-center flex flex-col items-center">
+          <div className="p-8 sm:p-12 text-center flex flex-col items-center">
             <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
               <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

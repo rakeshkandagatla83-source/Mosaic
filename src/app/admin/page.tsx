@@ -651,11 +651,26 @@ export default function AdminDashboard() {
                 Add User
               </button>
             )}
+            {/* Logout */}
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                setPassword("");
+              }}
+              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm px-4 py-2.5 rounded-xl border border-red-200 transition"
+              title="Logout"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+              </svg>
+              Logout
+            </button>
           </div>
         </div>
 
         {/* ── Tab Bar ── */}
-        <div className="flex items-center gap-1 bg-white border border-neutral-200 rounded-2xl p-1 shadow-sm w-fit">
+        <div className="overflow-x-auto w-full pb-1 -mb-1">
+        <div className="flex items-center gap-1 bg-white border border-neutral-200 rounded-2xl p-1 shadow-sm w-fit min-w-full sm:min-w-0">
           <button
             onClick={() => setActiveTab("pending")}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
@@ -734,6 +749,8 @@ export default function AdminDashboard() {
             Bulk Upload
           </button>
         </div>
+        </div>{/* end overflow-x-auto scroll wrapper */}
+
 
         {/* ══════════════════════════════════════════════
             TAB: PENDING APPROVALS
